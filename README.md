@@ -1,5 +1,6 @@
 # MP4META
 [![Coverage Status](https://coveralls.io/repos/github/gcottom/mp4meta/badge.svg?branch=main)](https://coveralls.io/github/gcottom/mp4meta?branch=main)
+
 MP4Meta is a high level implementation of abema's go-mp4, licensed under the MIT license, link in Acknowledgements. 
 This library is both an adapter and facade implementation for abema's low level I/O interfaces. By utilizing this library,
 we are able to interact with almost all relevent m4a /m4b metadata tags. At the same time, we are able to keep mdat in sync
