@@ -128,6 +128,7 @@ func saveMP4(r io.ReadSeeker, wo io.Writer, w mp4Writer, ws mp4WriteSeeker, _tag
 	var mdatOffsetDiff int64
 	var stcoOffsets []int64
 	closedTags := false
+	openBoxes := 0
 	rs := bufseekio.NewReadSeeker(r, 1024*1024, 4)
 
 	_, err := mp4lib.ReadBoxStructure(rs, func(h *mp4lib.ReadHandle) (interface{}, error) {
@@ -138,24 +139,36 @@ func saveMP4(r io.ReadSeeker, wo io.Writer, w mp4Writer, ws mp4WriteSeeker, _tag
 
 		case mp4lib.BoxTypeFree():
 			if !closedTags {
-				_, err := w.EndBox()
-				if err != nil {
-					return nil, err
+				if openBoxes > 0 {
+					_, err := w.EndBox()
+					if err != nil {
+						return nil, err
+					}
+					openBoxes--
 				}
 				if err := w.CopyBox(rs, &h.BoxInfo); err != nil {
 					return nil, err
 				}
-				_, err = w.EndBox()
-				if err != nil {
-					return nil, err
+				if openBoxes > 0 {
+					_, err := w.EndBox()
+					if err != nil {
+						return nil, err
+					}
+					openBoxes--
 				}
-				_, err = w.EndBox()
-				if err != nil {
-					return nil, err
+				if openBoxes > 0 {
+					_, err := w.EndBox()
+					if err != nil {
+						return nil, err
+					}
+					openBoxes--
 				}
-				_, err = w.EndBox()
-				if err != nil {
-					return nil, err
+				if openBoxes > 0 {
+					_, err := w.EndBox()
+					if err != nil {
+						return nil, err
+					}
+					openBoxes--
 				}
 				closedTags = true
 				return nil, nil
@@ -170,6 +183,7 @@ func saveMP4(r io.ReadSeeker, wo io.Writer, w mp4Writer, ws mp4WriteSeeker, _tag
 			if err != nil {
 				return nil, err
 			}
+			openBoxes++
 			box, _, err := h.ReadPayload()
 			if err != nil {
 				return nil, err
@@ -185,6 +199,7 @@ func saveMP4(r io.ReadSeeker, wo io.Writer, w mp4Writer, ws mp4WriteSeeker, _tag
 			if err != nil {
 				return nil, err
 			}
+			openBoxes++
 			box, _, err := h.ReadPayload()
 			if err != nil {
 				return nil, err
@@ -199,6 +214,7 @@ func saveMP4(r io.ReadSeeker, wo io.Writer, w mp4Writer, ws mp4WriteSeeker, _tag
 			if err != nil {
 				return nil, err
 			}
+			openBoxes++
 			ctx := h.BoxInfo.Context
 			if err = createAndWrite(w, ctx, _tags); err != nil {
 				return nil, err
