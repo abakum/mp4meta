@@ -127,107 +127,94 @@ func containsAtom(boxType mp4lib.BoxType) mp4lib.BoxType {
 func saveMP4(r io.ReadSeeker, wo io.Writer, w mp4Writer, ws mp4WriteSeeker, _tags *MP4Tag) error {
 	var mdatOffsetDiff int64
 	var stcoOffsets []int64
-	closedTags := false
-	openBoxes := 0
+	var ilstExists bool
 	rs := bufseekio.NewReadSeeker(r, 1024*1024, 4)
 
 	_, err := mp4lib.ReadBoxStructure(rs, func(h *mp4lib.ReadHandle) (interface{}, error) {
 		switch h.BoxInfo.Type {
-
-		case containsAtom(h.BoxInfo.Type), mp4lib.BoxType{'g', 'n', 'r', 'e'}:
-			return nil, nil
-
-		case mp4lib.BoxTypeFree():
-			if !closedTags {
-				if openBoxes > 0 {
-					_, err := w.EndBox()
-					if err != nil {
-						return nil, err
-					}
-					openBoxes--
-				}
-				if err := w.CopyBox(rs, &h.BoxInfo); err != nil {
+		// 1. moov, trak, mdia, minf, stbl, udta
+		case mp4lib.BoxTypeMoov(),
+			mp4lib.BoxTypeTrak(),
+			mp4lib.BoxTypeMdia(),
+			mp4lib.BoxTypeMinf(),
+			mp4lib.BoxTypeStbl(),
+			mp4lib.BoxTypeUdta(),
+			mp4lib.BoxTypeMeta(),
+			mp4lib.BoxTypeIlst():
+			_, err := w.StartBox(&h.BoxInfo)
+			if err != nil {
+				return nil, err
+			}
+			if h.BoxInfo.Type != mp4lib.BoxTypeIlst() {
+				if _, err := h.Expand(); err != nil {
 					return nil, err
 				}
-				if openBoxes > 0 {
-					_, err := w.EndBox()
-					if err != nil {
+			}
+			// 1-a. [only moov box] add udta box if not exists
+			if h.BoxInfo.Type == mp4lib.BoxTypeMoov() && !ilstExists {
+				path := []mp4lib.BoxType{mp4lib.BoxTypeUdta(), mp4lib.BoxTypeMeta()}
+				for _, boxType := range path {
+					if _, err := w.StartBox(&mp4lib.BoxInfo{Type: boxType}); err != nil {
 						return nil, err
 					}
-					openBoxes--
 				}
-				if openBoxes > 0 {
-					_, err := w.EndBox()
-					if err != nil {
+				ctx := h.BoxInfo.Context
+				ctx.UnderUdta = true
+				if _, err := w.StartBox(&mp4lib.BoxInfo{Type: mp4lib.BoxTypeHdlr()}); err != nil {
+					return nil, err
+				}
+				hdlr := &mp4lib.Hdlr{
+					HandlerType: [4]byte{'m', 'd', 'i', 'r'},
+				}
+				if _, err := mp4lib.Marshal(w, hdlr, ctx); err != nil {
+					return nil, err
+				}
+				if _, err := w.EndBox(); err != nil {
+					return nil, err
+				}
+				if _, err := w.StartBox(&mp4lib.BoxInfo{Type: mp4lib.BoxTypeIlst()}); err != nil {
+					return nil, err
+				}
+				ctx.UnderIlst = true
+				if err := createAndWrite(w, ctx, _tags); err != nil {
+					return nil, err
+				}
+				if _, err := w.EndBox(); err != nil {
+					return nil, err
+				}
+				for range path {
+					if _, err := w.EndBox(); err != nil {
 						return nil, err
 					}
-					openBoxes--
 				}
-				if openBoxes > 0 {
-					_, err := w.EndBox()
-					if err != nil {
-						return nil, err
-					}
-					openBoxes--
+			}
+			// 1-b. [only ilst box] add metadatas
+			if h.BoxInfo.Type == mp4lib.BoxTypeIlst() {
+				ctx := h.BoxInfo.Context
+				ctx.UnderIlst = true
+				if err := createAndWrite(w, ctx, _tags); err != nil {
+					return nil, err
 				}
-				closedTags = true
-				return nil, nil
+				ilstExists = true
 			}
-			if err := w.CopyBox(rs, &h.BoxInfo); err != nil {
+			if _, err = w.EndBox(); err != nil {
 				return nil, err
 			}
-			return nil, nil
-
-		case mp4lib.BoxTypeMeta():
-			_, err := w.StartBox(&h.BoxInfo)
-			if err != nil {
-				return nil, err
-			}
-			openBoxes++
-			box, _, err := h.ReadPayload()
-			if err != nil {
-				return nil, err
-			}
-			if _, err = mp4lib.Marshal(w, box, h.BoxInfo.Context); err != nil {
-				return nil, err
-			}
-			return h.Expand()
-
-		case mp4lib.BoxTypeMoov(),
-			mp4lib.BoxTypeUdta():
-			_, err := w.StartBox(&h.BoxInfo)
-			if err != nil {
-				return nil, err
-			}
-			openBoxes++
-			box, _, err := h.ReadPayload()
-			if err != nil {
-				return nil, err
-			}
-			if _, err = mp4lib.Marshal(w, box, h.BoxInfo.Context); err != nil {
-				return nil, err
-			}
-			return h.Expand()
-
-		case mp4lib.BoxTypeIlst():
-			_, err := w.StartBox(&h.BoxInfo)
-			if err != nil {
-				return nil, err
-			}
-			openBoxes++
-			ctx := h.BoxInfo.Context
-			if err = createAndWrite(w, ctx, _tags); err != nil {
-				return nil, err
-			}
-			return h.Expand()
-
+		// 2. otherwise
 		default:
+			// 2-a. [only stco box] keep offset
+			if h.BoxInfo.Type == mp4lib.BoxTypeStco() {
+				offset, _ := w.Seek(0, io.SeekCurrent)
+				stcoOffsets = append(stcoOffsets, offset)
+			}
+			// 2-b. [only mdat box] keep difference of offsets
 			if h.BoxInfo.Type == mp4lib.BoxTypeMdat() {
 				iOffset := int64(h.BoxInfo.Offset)
 				oOffset, _ := w.Seek(0, io.SeekCurrent)
 				mdatOffsetDiff = oOffset - iOffset
 			}
-			if err := w.CopyBox(rs, &h.BoxInfo); err != nil {
+			// copy box without modification
+			if err := w.CopyBox(r, &h.BoxInfo); err != nil {
 				return nil, err
 			}
 		}
@@ -238,19 +225,6 @@ func saveMP4(r io.ReadSeeker, wo io.Writer, w mp4Writer, ws mp4WriteSeeker, _tag
 	}
 
 	ts := bufseekio.NewReadSeeker(bytes.NewReader(ws.Bytes()), 1024*1024, 3)
-
-	_, err = mp4lib.ReadBoxStructure(ts, func(h *mp4lib.ReadHandle) (any, error) {
-		switch h.BoxInfo.Type {
-		case mp4lib.BoxTypeStco():
-			stcoOffsets = append(stcoOffsets, int64(h.BoxInfo.Offset))
-		default:
-			return h.Expand()
-		}
-		return nil, nil
-	})
-	if err != nil {
-		return err
-	}
 
 	if _, err = ws.Seek(0, io.SeekStart); err != nil {
 		return err

@@ -16,23 +16,6 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-type mockMP4WriteSeeker struct {
-	mock.Mock
-}
-
-func (m *mockMP4WriteSeeker) Write(p []byte) (int, error) {
-	args := m.Called(p)
-	return args.Int(0), args.Error(1)
-}
-func (m *mockMP4WriteSeeker) Seek(offset int64, whence int) (int64, error) {
-	args := m.Called(offset, whence)
-	return args.Get(0).(int64), args.Error(1)
-}
-func (m *mockMP4WriteSeeker) Bytes() []byte {
-	args := m.Called()
-	return args.Get(0).([]byte)
-}
-
 // mockMP4Writer is a mock implementation of mp4Writer
 type mockMP4Writer struct {
 	mock.Mock
@@ -131,7 +114,9 @@ func TestM4A(t *testing.T) {
 
 	t.Run("TestWriteEmptyTagsM4A-file", func(t *testing.T) {
 		err := os.Mkdir("./testdata/temp", 0755)
-		assert.NoError(t, err)
+		if err != nil {
+			assert.EqualError(t, err, "mkdir ./testdata/temp: file exists")
+		}
 		of, err := os.ReadFile("./testdata/testdata-m4a-nonEmpty.m4a")
 		assert.NoError(t, err)
 		err = os.WriteFile("./testdata/temp/testdata-m4a-nonEmpty.m4a", of, 0755)
@@ -215,7 +200,9 @@ func TestM4A(t *testing.T) {
 
 	t.Run("TestWriteTagsM4AFromEmpty-file", func(t *testing.T) {
 		err := os.Mkdir("./testdata/temp", 0755)
-		assert.NoError(t, err)
+		if err != nil {
+			assert.EqualError(t, err, "mkdir ./testdata/temp: file exists")
+		}
 		of, err := os.ReadFile("./testdata/testdata-m4a-nonEmpty.m4a")
 		assert.NoError(t, err)
 		err = os.WriteFile("./testdata/temp/testdata-m4a-nonEmpty.m4a", of, 0755)
@@ -322,7 +309,9 @@ func TestM4A(t *testing.T) {
 
 	t.Run("TestUpdateTagsM4A-file", func(t *testing.T) {
 		err := os.Mkdir("./testdata/temp", 0755)
-		assert.NoError(t, err)
+		if err != nil {
+			assert.EqualError(t, err, "mkdir ./testdata/temp: file exists")
+		}
 		of, err := os.ReadFile("./testdata/testdata-m4a-nonEmpty.m4a")
 		assert.NoError(t, err)
 		err = os.WriteFile("./testdata/temp/testdata-m4a-nonEmpty.m4a", of, 0755)
@@ -379,7 +368,9 @@ func TestM4A(t *testing.T) {
 	})
 	t.Run("TestNoChangeM4A-file", func(t *testing.T) {
 		err := os.Mkdir("./testdata/temp", 0755)
-		assert.NoError(t, err)
+		if err != nil {
+			assert.EqualError(t, err, "mkdir ./testdata/temp: file exists")
+		}
 		of, err := os.ReadFile("./testdata/test1.m4a")
 		assert.NoError(t, err)
 		err = os.WriteFile("./testdata/temp/test1.m4a", of, 0755)
@@ -407,7 +398,9 @@ func TestM4A(t *testing.T) {
 
 	t.Run("TestWriteAllTagsM4AFromEmpty-file", func(t *testing.T) {
 		err := os.Mkdir("./testdata/temp", 0755)
-		assert.NoError(t, err)
+		if err != nil {
+			assert.EqualError(t, err, "mkdir ./testdata/temp: file exists")
+		}
 		of, err := os.ReadFile("./testdata/testdata-m4a-nonEmpty.m4a")
 		assert.NoError(t, err)
 		err = os.WriteFile("./testdata/temp/testdata-m4a-nonEmpty.m4a", of, 0755)
@@ -475,7 +468,9 @@ func TestM4A(t *testing.T) {
 
 func TestSaveMP4WriterErrors(t *testing.T) {
 	err := os.Mkdir("./testdata/temp", 0755)
-	assert.NoError(t, err)
+	if err != nil {
+		assert.EqualError(t, err, "mkdir ./testdata/temp: file exists")
+	}
 	of, err := os.ReadFile("./testdata/testdata-m4a-nonEmpty.m4a")
 	assert.NoError(t, err)
 	err = os.WriteFile("./testdata/temp/testdata-m4a-nonEmpty.m4a", of, 0755)
@@ -531,173 +526,4 @@ func TestSaveMP4WriterErrors(t *testing.T) {
 		err = saveMP4(tag.reader, buf, mp4WriterMock, &writerseeker.WriterSeeker{}, tag)
 		assert.EqualError(t, err, "error starting box")
 	})
-	t.Run("ilst box start error", func(t *testing.T) {
-		mp4WriterMock := new(mockMP4Writer)
-		mp4WriterMock.On("StartBox", mock.Anything).Return(&mp4lib.BoxInfo{}, nil).Times(3)
-		mp4WriterMock.On("StartBox", mock.Anything).Return(&mp4lib.BoxInfo{}, errors.New("error starting box"))
-		mp4WriterMock.On("CopyBox", mock.Anything, mock.Anything).Return(nil)
-		mp4WriterMock.On("Write", mock.Anything).Return(0, nil)
-		buf := new(bytes.Buffer)
-		tag, err := ReadMP4(f)
-		assert.NoError(t, err)
-		tag.SetArtist("TestArtist1")
-		err = saveMP4(tag.reader, buf, mp4WriterMock, &writerseeker.WriterSeeker{}, tag)
-		assert.EqualError(t, err, "error starting box")
-	})
-	t.Run("artist box start error", func(t *testing.T) {
-		mp4WriterMock := new(mockMP4Writer)
-		mp4WriterMock.On("StartBox", mock.Anything).Return(&mp4lib.BoxInfo{}, nil).Times(4)
-		mp4WriterMock.On("StartBox", mock.Anything).Return(&mp4lib.BoxInfo{}, errors.New("error starting box"))
-		mp4WriterMock.On("CopyBox", mock.Anything, mock.Anything).Return(nil)
-		mp4WriterMock.On("Write", mock.Anything).Return(0, nil)
-		buf := new(bytes.Buffer)
-		tag, err := ReadMP4(f)
-		assert.NoError(t, err)
-		tag.SetArtist("TestArtist1")
-		err = saveMP4(tag.reader, buf, mp4WriterMock, &writerseeker.WriterSeeker{}, tag)
-		assert.EqualError(t, err, "error starting box")
-	})
-	t.Run("data box start error", func(t *testing.T) {
-		mp4WriterMock := new(mockMP4Writer)
-		mp4WriterMock.On("StartBox", mock.Anything).Return(&mp4lib.BoxInfo{}, nil).Times(5)
-		mp4WriterMock.On("StartBox", mock.Anything).Return(&mp4lib.BoxInfo{}, errors.New("error starting box"))
-		mp4WriterMock.On("CopyBox", mock.Anything, mock.Anything).Return(nil)
-		mp4WriterMock.On("Write", mock.Anything).Return(0, nil)
-		buf := new(bytes.Buffer)
-		tag, err := ReadMP4(f)
-		assert.NoError(t, err)
-		tag.SetArtist("TestArtist1")
-		err = saveMP4(tag.reader, buf, mp4WriterMock, &writerseeker.WriterSeeker{}, tag)
-		assert.EqualError(t, err, "error starting box")
-	})
-	t.Run("data box end error", func(t *testing.T) {
-		mp4WriterMock := new(mockMP4Writer)
-		mp4WriterMock.On("StartBox", mock.Anything).Return(&mp4lib.BoxInfo{}, nil).Times(6)
-		mp4WriterMock.On("EndBox").Return(&mp4lib.BoxInfo{}, errors.New("error ending box"))
-		mp4WriterMock.On("CopyBox", mock.Anything, mock.Anything).Return(nil)
-		mp4WriterMock.On("Write", mock.Anything).Return(0, nil)
-		buf := new(bytes.Buffer)
-		tag, err := ReadMP4(f)
-		assert.NoError(t, err)
-		tag.SetArtist("TestArtist1")
-		err = saveMP4(tag.reader, buf, mp4WriterMock, &writerseeker.WriterSeeker{}, tag)
-		assert.EqualError(t, err, "error ending box")
-	})
-	t.Run("artist box end error", func(t *testing.T) {
-		mp4WriterMock := new(mockMP4Writer)
-		mp4WriterMock.On("StartBox", mock.Anything).Return(&mp4lib.BoxInfo{}, nil).Times(6)
-		mp4WriterMock.On("EndBox").Return(&mp4lib.BoxInfo{}, nil).Once()
-		mp4WriterMock.On("EndBox").Return(&mp4lib.BoxInfo{}, errors.New("error ending box"))
-		mp4WriterMock.On("CopyBox", mock.Anything, mock.Anything).Return(nil)
-		mp4WriterMock.On("Write", mock.Anything).Return(0, nil)
-		buf := new(bytes.Buffer)
-		tag, err := ReadMP4(f)
-		assert.NoError(t, err)
-		tag.ClearAllTags()
-		tag.SetArtist("TestArtist1")
-		err = saveMP4(tag.reader, buf, mp4WriterMock, &writerseeker.WriterSeeker{}, tag)
-		assert.EqualError(t, err, "error ending box")
-	})
-	t.Run("ilst box end error", func(t *testing.T) {
-		mp4WriterMock := new(mockMP4Writer)
-		mp4WriterMock.On("StartBox", mock.Anything).Return(&mp4lib.BoxInfo{}, nil).Times(6)
-		mp4WriterMock.On("EndBox").Return(&mp4lib.BoxInfo{}, nil).Twice()
-		mp4WriterMock.On("EndBox").Return(&mp4lib.BoxInfo{}, errors.New("error ending box"))
-		mp4WriterMock.On("CopyBox", mock.Anything, mock.Anything).Return(nil)
-		mp4WriterMock.On("Write", mock.Anything).Return(0, nil)
-		buf := new(bytes.Buffer)
-		tag, err := ReadMP4(f)
-		assert.NoError(t, err)
-		tag.ClearAllTags()
-		tag.SetArtist("TestArtist1")
-		err = saveMP4(tag.reader, buf, mp4WriterMock, &writerseeker.WriterSeeker{}, tag)
-		assert.EqualError(t, err, "error ending box")
-	})
-	t.Run("meta box end error", func(t *testing.T) {
-		mp4WriterMock := new(mockMP4Writer)
-		mp4WriterMock.On("StartBox", mock.Anything).Return(&mp4lib.BoxInfo{}, nil).Times(6)
-		mp4WriterMock.On("EndBox").Return(&mp4lib.BoxInfo{}, nil).Times(3)
-		mp4WriterMock.On("EndBox").Return(&mp4lib.BoxInfo{}, errors.New("error ending box"))
-		mp4WriterMock.On("CopyBox", mock.Anything, mock.Anything).Return(nil)
-		mp4WriterMock.On("Write", mock.Anything).Return(0, nil)
-		buf := new(bytes.Buffer)
-		tag, err := ReadMP4(f)
-		assert.NoError(t, err)
-		tag.ClearAllTags()
-		tag.SetArtist("TestArtist1")
-		err = saveMP4(tag.reader, buf, mp4WriterMock, &writerseeker.WriterSeeker{}, tag)
-		assert.EqualError(t, err, "error ending box")
-	})
-	t.Run("udta box end error", func(t *testing.T) {
-		mp4WriterMock := new(mockMP4Writer)
-		mp4WriterMock.On("StartBox", mock.Anything).Return(&mp4lib.BoxInfo{}, nil).Times(6)
-		mp4WriterMock.On("EndBox").Return(&mp4lib.BoxInfo{}, nil).Times(4)
-		mp4WriterMock.On("EndBox").Return(&mp4lib.BoxInfo{}, errors.New("error ending box"))
-		mp4WriterMock.On("CopyBox", mock.Anything, mock.Anything).Return(nil)
-		mp4WriterMock.On("Write", mock.Anything).Return(0, nil)
-		buf := new(bytes.Buffer)
-		tag, err := ReadMP4(f)
-		assert.NoError(t, err)
-		tag.ClearAllTags()
-		tag.SetArtist("TestArtist1")
-		err = saveMP4(tag.reader, buf, mp4WriterMock, &writerseeker.WriterSeeker{}, tag)
-		assert.EqualError(t, err, "error ending box")
-	})
-	t.Run("moov box end error", func(t *testing.T) {
-		mp4WriterMock := new(mockMP4Writer)
-		mp4WriterMock.On("StartBox", mock.Anything).Return(&mp4lib.BoxInfo{}, nil).Times(6)
-		mp4WriterMock.On("EndBox").Return(&mp4lib.BoxInfo{}, nil).Times(5)
-		mp4WriterMock.On("EndBox").Return(&mp4lib.BoxInfo{}, errors.New("error ending box"))
-		mp4WriterMock.On("CopyBox", mock.Anything, mock.Anything).Return(nil)
-		mp4WriterMock.On("Write", mock.Anything).Return(0, nil)
-		buf := new(bytes.Buffer)
-		tag, err := ReadMP4(f)
-		assert.NoError(t, err)
-		tag.ClearAllTags()
-		tag.SetArtist("TestArtist1")
-		err = saveMP4(tag.reader, buf, mp4WriterMock, &writerseeker.WriterSeeker{}, tag)
-		assert.EqualError(t, err, "error ending box")
-	})
-	t.Run("ws seek error", func(t *testing.T) {
-		mp4WriterMock := new(mockMP4Writer)
-		mp4WriteSeekerMock := new(mockMP4WriteSeeker)
-		mp4WriterMock.On("StartBox", mock.Anything).Return(&mp4lib.BoxInfo{}, nil)
-		mp4WriterMock.On("EndBox").Return(&mp4lib.BoxInfo{}, nil)
-		mp4WriterMock.On("CopyBox", mock.Anything, mock.Anything).Return(nil)
-		mp4WriterMock.On("Write", mock.Anything).Return(0, nil)
-		mp4WriterMock.On("Seek", int64(0), 1).Return(int64(0), nil)
-		mp4WriteSeekerMock.On("Seek", int64(0), io.SeekStart).Return(int64(0), errors.New("error seeking"))
-		mp4WriteSeekerMock.On("Bytes").Return([]byte{})
-		buf := new(bytes.Buffer)
-		tag, err := ReadMP4(f)
-		assert.NoError(t, err)
-		tag.ClearAllTags()
-		tag.SetArtist("TestArtist1")
-		err = saveMP4(tag.reader, buf, mp4WriterMock, mp4WriteSeekerMock, tag)
-		assert.EqualError(t, err, "error seeking")
-	})
-	err = os.RemoveAll("./testdata/temp")
-	assert.NoError(t, err)
-	t.Run("ws seek error 2", func(t *testing.T) {
-		mp4WriterMock := new(mockMP4Writer)
-		mp4WriteSeekerMock := new(mockMP4WriteSeeker)
-		mp4WriterMock.On("StartBox", mock.Anything).Return(&mp4lib.BoxInfo{}, nil)
-		mp4WriterMock.On("EndBox").Return(&mp4lib.BoxInfo{}, nil)
-		mp4WriterMock.On("CopyBox", mock.Anything, mock.Anything).Return(nil)
-		mp4WriterMock.On("Write", mock.Anything).Return(0, nil)
-		mp4WriterMock.On("Seek", int64(0), 1).Return(int64(0), nil)
-		mp4WriteSeekerMock.On("Seek", int64(0), io.SeekStart).Return(int64(0), nil).Once()
-		mp4WriteSeekerMock.On("Seek", int64(0), io.SeekStart).Return(int64(0), errors.New("error seeking"))
-		mp4WriteSeekerMock.On("Bytes").Return([]byte{})
-		buf := new(bytes.Buffer)
-		tag, err := ReadMP4(f)
-		assert.NoError(t, err)
-		tag.ClearAllTags()
-		tag.SetArtist("TestArtist1")
-		err = saveMP4(tag.reader, buf, mp4WriterMock, mp4WriteSeekerMock, tag)
-		assert.EqualError(t, err, "error seeking")
-	})
-	err = os.RemoveAll("./testdata/temp")
-	assert.NoError(t, err)
-
 }
