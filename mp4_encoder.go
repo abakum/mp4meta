@@ -3,7 +3,6 @@ package mp4meta
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"image/png"
 	"io"
 	"os"
@@ -100,10 +99,8 @@ func createAndWrite(w mp4Writer, ctx mp4lib.Context, _tags *MP4Tag) error {
 			return err
 		}
 
-		if j, err := mp4lib.Marshal(w, boxData, dataCtx); err != nil {
+		if _, err := mp4lib.Marshal(w, boxData, dataCtx); err != nil {
 			return err
-		} else {
-			fmt.Println(j)
 		}
 
 		if _, err := w.EndBox(); err != nil {
